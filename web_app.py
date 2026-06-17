@@ -143,19 +143,79 @@ function updateInfo(infoId, input) {
     }
 }
 
-function showLoading() {
-    const btn = document.getElementById('submitBtn');
-    const loading = document.getElementById('loadingBox');
-    // Small delay to allow form validation to run first
-    setTimeout(() => {
-        if (document.getElementById('cloneForm').checkValidity()) {
-            btn.disabled = true;
-            loading.style.display = 'block';
-        }
-    }, 50);
+function compressImage(file, maxWidth, maxHeight, quality) {
+    return new Promise((resolve) => {
+        if (file.size < 300 * 1024) { resolve(file); return; }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                let w = img.width, h = img.height;
+                if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
+                if (h > maxHeight) { w = Math.round(w * maxHeight / h); h = maxHeight; }
+                const canvas = document.createElement('canvas');
+                canvas.width = w; canvas.height = h;
+                canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                canvas.toBlob((blob) => {
+                    resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }));
+                }, 'image/jpeg', quality);
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
 }
 
-// Drag and drop highlight
+document.getElementById('cloneForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const btn = document.getElementById('submitBtn');
+    const loading = document.getElementById('loadingBox');
+    const targetUrl = document.querySelector('input[name="target_url"]').value.trim();
+    if (!targetUrl) { alert('Please enter a Target URL.'); return; }
+    const txtInput = document.getElementById('txtInput');
+    if (!txtInput.files.length) { alert('Please upload at least one .txt file.'); return; }
+
+    btn.disabled = true;
+    loading.style.display = 'block';
+    loading.innerHTML = '<span style="border:3px solid #f0efff;border-top:3px solid #6c63ff;border-radius:50%;width:18px;height:18px;display:inline-block;animation:spin 0.9s linear infinite;vertical-align:middle;margin-right:8px;"></span> Compressing images...';
+
+    const formData = new FormData();
+    formData.append('target_url', targetUrl);
+    for (const f of txtInput.files) { formData.append('txt_files', f); }
+
+    const imgInput = document.getElementById('imgInput');
+    let totalSize = Array.from(txtInput.files).reduce((s, f) => s + f.size, 0);
+    for (const f of imgInput.files) {
+        const c = await compressImage(f, 1200, 900, 0.72);
+        totalSize += c.size;
+        formData.append('img_files', c);
+    }
+
+    if (totalSize > 3.8 * 1024 * 1024) {
+        loading.style.display = 'none'; btn.disabled = false;
+        alert('Files too large even after compression. Please use fewer or smaller images (max total ~3.5MB).');
+        return;
+    }
+
+    loading.innerHTML = '<span style="border:3px solid #f0efff;border-top:3px solid #6c63ff;border-radius:50%;width:18px;height:18px;display:inline-block;animation:spin 0.9s linear infinite;vertical-align:middle;margin-right:8px;"></span> Cloning & injecting data... please wait';
+
+    try {
+        const res = await fetch('/clone', { method: 'POST', body: formData });
+        const ct = res.headers.get('Content-Type') || '';
+        if (ct.includes('html')) {
+            document.open(); document.write(await res.text()); document.close();
+        } else {
+            const blob = await res.blob();
+            const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'cloned_website.zip' });
+            document.body.appendChild(a); a.click(); a.remove();
+            loading.style.display = 'none'; btn.disabled = false;
+        }
+    } catch(err) {
+        loading.style.display = 'none'; btn.disabled = false;
+        alert('Error: ' + err.message);
+    }
+});
+
 ['txtZone','imgZone'].forEach(id => {
     const zone = document.getElementById(id);
     zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
