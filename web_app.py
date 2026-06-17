@@ -1,11 +1,12 @@
 from flask import Flask, request, render_template_string, send_file
 import os, sys, shutil, zipfile
-import extractor as web_extractor
 from auto_cloner import AutoWebCloner
 
 app = Flask(__name__)
 
-HTML = """
+DEFAULT_DATA_FOLDER = r"C:\Users\admin\Downloads\AutoWebCloner\customer_data"
+
+HTML = r"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -42,8 +43,8 @@ HTML = """
         <label>📎 Target Website URL (Design to Clone)</label>
         <input type="text" name="target_url" placeholder="https://example.com" value="{{ last_url or '' }}" required>
 
-        <label>📁 Customer Data Folder Path</label>
-        <input type="text" name="data_folder" placeholder="C:\Users\admin\Downloads\AutoWebCloner\customer_data" value="{{ last_folder or 'C:\\Users\\admin\\Downloads\\AutoWebCloner\\customer_data' }}" required>
+        <label>&#x1F4C1; Customer Data Folder Path</label>
+        <input type="text" name="data_folder" placeholder="C:\Users\admin\Downloads\AutoWebCloner\customer_data" value="{{ last_folder }}" required>
 
         <button type="submit">🚀 Clone & Generate Website</button>
     </form>
@@ -76,7 +77,7 @@ HTML = """
 
 @app.route('/')
 def index():
-    return render_template_string(HTML)
+    return render_template_string(HTML, last_folder=DEFAULT_DATA_FOLDER, last_url='')
 
 @app.route('/clone', methods=['POST'])
 def clone():
